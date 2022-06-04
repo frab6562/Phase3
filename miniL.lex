@@ -11,11 +11,12 @@
 #include <stack>
 #include <vector>
 #include <cstdlib>
-
 #include "miniL-parser.hpp"
+
 extern "C" int yylex();
 int currLine = 1, currpos = 1;
-
+extern int yyerror(char *s);
+char * file;
 %}
    /* some common rules */
 DIGIT	[0-9]
@@ -90,3 +91,20 @@ IDENT	{LETTER}([_]*{LETTER}*{DIGIT}*)*({LETTER}|{DIGIT})
 
 .               {printf("Error at line %d, column %d: unrecognized symbol \"%s\"\n", currLine, currpos, yytext); exit(0);}
 %%
+
+/*
+int main(int argc, char **argv) {
+  if (argc > 1) {
+    yyin = fopen(argv[1], "r");
+    if (yyin == NULL) {
+      yyin = stdin;
+    }
+  }
+  else {
+    yyin = stdin;
+  }
+
+  yyparse();
+  return 0;
+}
+*/

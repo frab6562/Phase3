@@ -16,42 +16,43 @@ using namespace std;
 extern "C" int yylex();
 extern FILE * yyin;
 extern int currLine;
-extern int currpos;
- 
+extern int currpos; 
 void yyerror(const char * msg) {
 	printf("Error: On line %d, column %d: %s \n", currLine, currpos, msg);
 }
-
 bool no_error = true;
-vector <string> funcTable;
+vector <string> functionMap;
 void addFunc(string name) {
-	funcTable.push_back(name);
+	functionMap.push_back(name);
 }
-
-vector <string> tempTable;
-vector <string> identTable;
-vector <string> labelTable;
 int numTemps = 0;
 int numLabels = 0;
-string make_temp() {
+
+vector <string> tempVector;
+vector <string> identVector;
+string temporize() {
 	string ret = "__temp__" + to_string(numTemps);
-	tempTable.push_back("__temp__" + to_string(numTemps));
+	tempVector.push_back("__temp__" + to_string(numTemps));
 	++numTemps;
 	return ret;
 }
-string make_label() {
+vector <string> labelVector;
+string labelize() {
 	string ret = "__label__" + to_string(numLabels);
-	labelTable.push_back(ret);
+	labelVector.push_back(ret);
 	++numLabels;
 	return ret;
 }
+
 int numRegs = 0;
 int numIdents = 0;
 
 bool root = true;
-bool isFunc = true;
+bool Func = true;
+
 bool writeFlag = false;
 bool readFlag = false;
+
 bool EQflag = false;
 bool NEQflag = false;
 bool LTflag = false;
@@ -99,10 +100,12 @@ string code;
 %token <numVal> NUMBER
 %token <identVal> IDENT
 %type <startprog> startprogram
-%type <grammar> program function declaration declarations Ident statements statement svar sif 
-%type <grammar> swhile sdo sfor varLoop sread swrite scontinue sreturn bool_expr relation_expr
-%type <grammar>  relation_exprs ece comp expression addSubExpr multi_expr term expressionLoop var
+
+%type <grammar> program function declaration declarations Ident statements statement variable if_2 
+%type <grammar> while_2 do_2 for_2 varLoop read_2 write_2 continue_2 return_2 bool_expr relation_expr
+%type <grammar> relation_exprs ece comp expression addSub multi_expr term expressionLoop var
 %%
+
 startprogram:	program {}
 	    	;
 
@@ -113,7 +116,7 @@ program:	function program
 		;
 
 function:	FUNCTION Ident SEMICOLON BEGINPARAMS declarations ENDPARAMS BEGINLOCALS declarations ENDLOCALS BEGINBODY statements ENDBODY
-		{if (isFunc == 0) {code += "endfunc\n\n";} isFunc = true;}
+		{if (Func == 0) {code += "endfunc\n\n";} Func = true;}
 		;
 
 declarations:	
@@ -123,8 +126,8 @@ declarations:
 		;
 
 declaration:	IDENT COLON INTEGER
-	   	{code += ". "; string pls($1); string tempo = "";							// It looks like I'm taping up trash together and thats exactly what I'm doing
-			for (int k = 0; k < pls.size(); ++k) {								// $1 picks up entire string so for loop is used to get the ident only by looking for the first space
+	   	{code += ". "; string pls($1); string tempo = "";							
+			for (int k = 0; k < pls.size(); ++k) {	
                                 if (pls.at(k) == ' ' || pls.at(k) == '(' || pls.at(k) == ')' || pls.at(k) == ';') {
                                         k = 69;
                                 }
@@ -133,14 +136,14 @@ declaration:	IDENT COLON INTEGER
                                 }
                         }
 		if (root) {code += "\n= " + tempo; code += ", $" + to_string(numRegs); ++numRegs; root = false;} 
-		code += "\n"; identTable.push_back(tempo); ++numIdents;}
+		code += "\n"; identVector.push_back(tempo); ++numIdents;}
 		| IDENT COLON ARRAY L_SQUARE_BRACKET NUMBER R_SQUARE_BRACKET OF INTEGER
 		{code += ".[] "; code += $1; code += ", "; code += $5; code += "\n";}
 		;
 
 Ident:		IDENT
      		{string tempo;
-		 if (isFunc == true) {funcTable.push_back($1); isFunc = false; code += "func "; string pls($1);
+		 if (Func == true) {functionMap.push_back($1); Func = false; code += "func "; string pls($1);
 			for (int k = 0; k < pls.size(); ++k) {
                                 if (pls.at(k) == ' ' || pls.at(k) == '(' || pls.at(k) == ')' || pls.at(k) == ';') {
                                         k = 69;
@@ -151,9 +154,8 @@ Ident:		IDENT
                         }
 		
 		}
-		/*else if (writeFlag) {writeFlag = false; code += ".> " + string(identTable.at(numIdents-1));}*/
 		else if (assignedFlag) {assignedFlag = false; --numIdents;}
-		else {string temp = make_temp(); code += ". " + temp; code += "\n= "; code += temp + ", "; string pls($1);
+		else {string t = temporize(); code += ". " + t; code += "\n= "; code += t + ", "; string pls($1);
 			for (int k = 0; k < pls.size(); ++k) {
 				if (pls.at(k) == ' ' || pls.at(k) == '(' || pls.at(k) == ')' || pls.at(k) == ';') {
 					k = 69;
@@ -163,7 +165,7 @@ Ident:		IDENT
 				}
 			}
 		}
-		code += "\n"; identTable.push_back(tempo); ++numIdents;}
+		code += "\n"; identVector.push_back(tempo); ++numIdents;}
 		;
 
 statements:	statement SEMICOLON statements
@@ -172,67 +174,67 @@ statements:	statement SEMICOLON statements
 		{}
 		;
 
-statement:	svar
+statement:	variable
 	  	{}
-	  	| sif
+	  	| if_2
 		{}
-		| swhile
+		| while_2
 		{}
-		| sdo
+		| do_2
 		{}
-		| sfor
+		| for_2
 		{}
-		| sread
-		{if (readFlag) {readFlag = false; code += ".< " + string(identTable.at(numIdents-1)) + "\n";/* string temp = make_temp(); code += ". " + temp + "\n" + "= " + temp + ", " + string(identTable.at(numIdents-1)) + "\n";*/}}
-		| swrite
-		{if (writeFlag) {writeFlag = false; code += ".> " + string(identTable.at(numIdents-2)) + "\n";}}
-		| scontinue
+		| read_2
+		{if (readFlag) {readFlag = false; code += ".< " + string(identVector.at(numIdents-1)) + "\n";}}
+		| write_2
+		{if (writeFlag) {writeFlag = false; code += ".> " + string(identVector.at(numIdents-2)) + "\n";}}
+		| continue_2
 		{}
-		| sreturn
+		| return_2
 		{}
 		;
 
-svar:		var ASSIGN expression
-    		{assignedFlag = true; code += "= " + string(identTable.at(numIdents-2)) + ", __temp__" + to_string(numTemps-1);}
+variable:	var ASSIGN expression
+    		{assignedFlag = true; code += "= " + string(identVector.at(numIdents-2)) + ", __temp__" + to_string(numTemps-1);}
 		;
 
-sif:		IF bool_expr THEN statements ENDIF
+if_2:		IF bool_expr THEN statements ENDIF
    		{code += ": __label__" + to_string(numLabels-1) + "\n";}
 		| IF bool_expr THEN statements ELSE statements ENDIF
 		{}
 		;
 
-swhile:		WHILE bool_expr BEGINLOOP statements ENDLOOP
+while_2:		WHILE bool_expr BEGINLOOP statements ENDLOOP
       		{}
 		;
 
-sdo:		DO BEGINLOOP statements ENDLOOP WHILE bool_expr
+do_2:		DO BEGINLOOP statements ENDLOOP WHILE bool_expr
    		{}
 		;
 
-sfor:		FOR var ASSIGN NUMBER SEMICOLON bool_expr SEMICOLON var ASSIGN expression BEGINLOOP statements ENDLOOP
+for_2:		FOR var ASSIGN NUMBER SEMICOLON bool_expr SEMICOLON var ASSIGN expression BEGINLOOP statements ENDLOOP
     		{}
 		;
 
-varLoop:	/*epsilon*/
+varLoop:
        		{}
 		| COMMA var varLoop
 		  {}
 		;
 
-sread:		READ var varLoop
+read_2:		READ var varLoop
      		{readFlag = true;}
 		;
      
-swrite:		WRITE var varLoop
-      		{/*code += ".> ";*/ writeFlag = true;}
+write_2:		WRITE var varLoop
+      		{writeFlag = true;}
 		;
 
-scontinue:	CONTINUE
+continue_2:	CONTINUE
 	 	{code += "continue\n";}
 		;
 
-sreturn:	RETURN expression
+return_2:	RETURN expression
        		{code += "ret "; code += "__temp__" + to_string(numTemps-1) + "\n";}
 		;
 
@@ -278,20 +280,88 @@ comp:		EQ
 		  {GTEflag = true;}
 		;
 
-expression:	multi_expr addSubExpr
-	  	{if (LTEflag == true) {LTEflag = false; string lab = make_label(); string temp = make_temp(); code += ". __temp__" + to_string(numTemps-1); code += "\n<= __temp__" + to_string(numTemps-1) + ", "; code += "__temp__" + to_string(numTemps - 3); code += ", __temp__" + to_string(numTemps - 2) + "\n?:= " + lab + ", __temp__" + to_string(numTemps-1) + "\n"; string lab2 = make_label(); code += ":= " + lab2 + "\n" + ": " + lab + "\n";}
-		 if (GTEflag == true) {GTEflag = false; string lab = make_label(); string temp = make_temp(); code += ". __temp__" + to_string(numTemps-1); code += "\n>= __temp__" + to_string(numTemps-1) + ", "; code += "__temp__" + to_string(numTemps - 3); code += ", __temp__" + to_string(numTemps - 2) + "\n?:= " + lab + ", __temp__" + to_string(numTemps-1) + "\n"; string lab2 = make_label(); code += ":= " + lab2 + "\n" + ": " + lab + "\n";}
-		 if (LTflag == true) {LTflag = false; string lab = make_label(); string temp = make_temp(); code += ". __temp__" + to_string(numTemps-1); code += "\n< __temp__" + to_string(numTemps-1) + ", "; code += "__temp__" + to_string(numTemps - 3); code += ", __temp__" + to_string(numTemps - 2) + "\n?:= " + lab + ", __temp__" + to_string(numTemps-1) + "\n"; string lab2 = make_label(); code += ":= " + lab2 + "\n" + ": " + lab + "\n";}
-		 if (GTflag == true) {GTflag = false; string lab = make_label(); string temp = make_temp(); code += ". __temp__" + to_string(numTemps-1); code += "\n> __temp__" + to_string(numTemps-1) + ", "; code += "__temp__" + to_string(numTemps - 3); code += ", __temp__" + to_string(numTemps - 2) + "\n?:= " + lab + ", __temp__" + to_string(numTemps-1) + "\n"; string lab2 = make_label(); code += ":= " + lab2 + "\n" + ": " + lab + "\n";}
-		 if (SUBflag == true) {SUBflag = false; string temp = make_temp(); code += ". __temp__" + to_string(numTemps-1); code += "\n- __temp__" + to_string(numTemps-1) + ", "; code += "__temp__" + to_string(numTemps - 3); code += ", __temp__" + to_string(numTemps - 2) + "\n";/* code += "param __temp__" + to_string(numTemps-1); code += "\n";*/}
-		 if (ADDflag == true) {ADDflag = false; string temp = make_temp(); code += ". __temp__" + to_string(numTemps-1); code += "\n+ __temp__" + to_string(numTemps-1) + ", "; code += "__temp__" + to_string(numTemps - 6); code += ", __temp__" + to_string(numTemps - 2) + "\n";}
-		 if (MULTflag == true) {MULTflag = false; string temp = make_temp(); code += ". __temp__" + to_string(numTemps-1); code += "\n* __temp__" + to_string(numTemps-1) + ", "; code += "__temp__" + to_string(numTemps - 3); code += ", __temp__" + to_string(numTemps - 2) + "\n";}
-		 if (DIVflag == true) {DIVflag = false; string temp = make_temp(); code += ". __temp__" + to_string(numTemps-1); code += "\n/ __temp__" + to_string(numTemps-1) + ", "; code += "__temp__" + to_string(numTemps - 3); code += ", __temp__" + to_string(numTemps - 2) + "\n";}
-		 if (MODflag == true) {MODflag = false; string temp = make_temp(); code += ". __temp__" + to_string(numTemps-1); code += "\n% __temp__" + to_string(numTemps-1) + ", "; code += "__temp__" + to_string(numTemps - 3); code += ", __temp__" + to_string(numTemps - 2) + "\n";}
-		/* yes this is very redundant but i love coding c: */}
-		;
+expression:	multi_expr addSub
+	  	{if (LTEflag == true){
+			LTEflag = false;
+			string label = labelize(); 
+			string t = temporize(); 
+			code += ". __temp__" + to_string(numTemps-1); 
+			code += "\n<= __temp__" + to_string(numTemps-1) + ", "; 
+			code += "__temp__" + to_string(numTemps - 3); 
+			code += ", __temp__" + to_string(numTemps - 2) + "\n?:= " + label + ", __temp__" + to_string(numTemps-1) + "\n"; 
+			string lab2 = labelize(); 
+			code += ":= " + lab2 + "\n" + ": " + label + "\n";
+		}
+		 if (GTEflag == true) {
+			GTEflag = false; 
+			string label = labelize(); 
+			string t = temporize(); 
+			code += ". __temp__" + to_string(numTemps-1); 
+			code += "\n>= __temp__" + to_string(numTemps-1) + ", ";
+			code += "__temp__" + to_string(numTemps - 3); 
+			code += ", __temp__" + to_string(numTemps - 2) + "\n?:= " + label + ", __temp__" + to_string(numTemps-1) + "\n"; 
+			string lab2 = labelize(); 
+			code += ":= " + lab2 + "\n" + ": " + label + "\n";
+		}
+		 if (LTflag == true) {
+			LTflag = false; 
+			string label = labelize(); 
+			string t = temporize(); 
+			code += ". __temp__" + to_string(numTemps-1); 
+			code += "\n< __temp__" + to_string(numTemps-1) + ", "; 
+			code += "__temp__" + to_string(numTemps - 3); 
+			code += ", __temp__" + to_string(numTemps - 2) + "\n?:= " + label + ", __temp__" + to_string(numTemps-1) + "\n"; 
+			string lab2 = labelize(); code += ":= " + lab2 + "\n" + ": " + label + "\n";
+		}
+		 if (GTflag == true) {
+			GTflag = false; string label = labelize(); 
+			string t = temporize(); code += ". __temp__" + to_string(numTemps-1); 
+			code += "\n> __temp__" + to_string(numTemps-1) + ", "; 
+			code += "__temp__" + to_string(numTemps - 3); 
+			code += ", __temp__" + to_string(numTemps - 2) + "\n?:= " + label + ", __temp__" + to_string(numTemps-1) + "\n"; 
+			string lab2 = labelize(); code += ":= " + lab2 + "\n" + ": " + label + "\n";
+		}
+		 if (SUBflag == true) {
+			SUBflag = false; string t = temporize(); 
+			code += ". __temp__" + to_string(numTemps-1); 
+			code += "\n- __temp__" + to_string(numTemps-1) + ", "; 
+			code += "__temp__" + to_string(numTemps - 3); 
+			code += ", __temp__" + to_string(numTemps - 2) + "\n";
+		} 
+		 if (ADDflag == true) {
+			ADDflag = false; 
+			string t = temporize(); 
+			code += ". __temp__" + to_string(numTemps-1); 
+			code += "\n+ __temp__" + to_string(numTemps-1) + ", "; 
+			code += "__temp__" + to_string(numTemps - 6); 
+			code += ", __temp__" + to_string(numTemps - 2) + "\n";
+		}
+		 if (MULTflag == true) {
+			MULTflag = false; 
+			string t = temporize(); 
+			code += ". __temp__" + to_string(numTemps-1); 
+			code += "\n* __temp__" + to_string(numTemps-1) + ", "; 
+			code += "__temp__" + to_string(numTemps - 3); code += ", __temp__" + to_string(numTemps - 2) + "\n";
+		}
+		 if (DIVflag == true) {
+			DIVflag = false; 
+			string t = temporize(); 
+			code += ". __temp__" + to_string(numTemps-1); 
+			code += "\n/ __temp__" + to_string(numTemps-1) + ", "; 
+			code += "__temp__" + to_string(numTemps - 3); 
+			code += ", __temp__" + to_string(numTemps - 2) + "\n";
+		}
+		 if (MODflag == true) {
+			MODflag = false; 
+			string t = temporize(); 
+			code += ". __temp__" + to_string(numTemps-1); 
+			code += "\n% __temp__" + to_string(numTemps-1) + ", "; 
+			code += "__temp__" + to_string(numTemps - 3); 
+			code += ", __temp__" + to_string(numTemps - 2) + "\n";
+		}
+		;}
 
-addSubExpr:	/*epsilon*/
+addSub:	
 	  	{}
 		| ADD expression
 		  {ADDflag = true;}
@@ -310,17 +380,17 @@ multi_expr:	term
 		;
 
 term:		SUB var 
-    		{/*unary minus*/}
+    		{}
 		| var
 		  {}
 		| SUB NUMBER
-		  {/*string temp = make_temp(); code += "-" + to_string($2) + "\n";*/}
+		  {}
 		| NUMBER
-		  {string temp = make_temp(); code+= ". " + temp + "\n= " + temp + ", "; code += to_string($1) + "\n";}
+		  {string t = temporize(); code+= ". " + t + "\n= " + t + ", "; code += to_string($1) + "\n";}
 		| IDENT LPAREN expression RPAREN
 		  {code += "param __temp__" + to_string(numTemps-1) + "\n";
 
-			string temp = make_temp(); code += ". " + temp + "\n"; code += "call "; string pls($1);
+			string t = temporize(); code += ". " + t + "\n"; code += "call "; string pls($1);
 			for (int k = 0; k < pls.size(); ++k) {
                                 if (pls.at(k) == ' ' || pls.at(k) == '('){
                                         k = 69;
@@ -334,7 +404,7 @@ term:		SUB var
 		  {}
 		;
 
-expressionLoop:	/*epsilon*/
+expressionLoop:	
 	      	{}
 	      	| COMMA expression expressionLoop
 	      	  {}
@@ -359,7 +429,6 @@ var:		Ident
 		;
 
 %%
-
 int main(int argc, char ** argv) {
 	if (argc >= 2) {
 		yyin = fopen(argv[1], "r");
@@ -370,20 +439,18 @@ int main(int argc, char ** argv) {
 	else {
 		yyin = stdin;
 	}
-	yyparse();
-	
-	for (int i = 0; i < funcTable.size() - 1; ++i) {
-		for (int j = i+1; j < funcTable.size(); ++j) {
-			if (funcTable.at(i) == funcTable.at(j)) {
+	yyparse();	
+	for (int i = 0; i < functionMap.size() - 1; ++i) {
+		for (int j = i+1; j < functionMap.size(); ++j) {
+			if (functionMap.at(i) == functionMap.at(j)) {
 				no_error = false;
 				cerr << "Multiple functions with same name detected. \n";
 			}
 		}
 	}
-	
 	if (no_error) {
                 ofstream file;
-                file.open("CODE.mil");
+                file.open("Output.mil");
                 file << code;
                 file.close();
         }
