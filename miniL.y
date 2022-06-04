@@ -13,8 +13,6 @@
 
 using namespace std;
 
-// (INC) Does not support array access/io statements or logical operators. Labeling is also a bit wonky... oops
-// Kinda modeled this to work for fibonacci.min file only
 extern "C" int yylex();
 extern FILE * yyin;
 extern int currLine;
@@ -25,7 +23,6 @@ void yyerror(const char * msg) {
 }
 
 bool no_error = true;
-
 vector <string> funcTable;
 void addFunc(string name) {
 	funcTable.push_back(name);
@@ -50,6 +47,7 @@ string make_label() {
 }
 int numRegs = 0;
 int numIdents = 0;
+
 bool root = true;
 bool isFunc = true;
 bool writeFlag = false;
@@ -66,6 +64,7 @@ bool MULTflag = false;
 bool DIVflag = false;
 bool MODflag = false;
 bool assignedFlag = false;
+
 string code;
 %}
 
@@ -83,33 +82,33 @@ string code;
 
 %start startprogram
 
-%token FUNCTION BEGINPARAMS ENDPARAMS BEGINLOCALS ENDLOCALS BEGINBODY ENDBODY INTEGER ARRAY OF IF THEN ENDIF ELSE WHILE DO FOR BEGINLOOP ENDLOOP CONTINUE READ WRITE TRUE FALSE SEMICOLON COLON COMMA LPAREN RPAREN L_SQUARE_BRACKET R_SQUARE_BRACKET RETURN
+%token FUNCTION BEGINPARAMS ENDPARAMS BEGINLOCALS ENDLOCALS BEGINBODY
+%token ENDBODY INTEGER ARRAY OF IF THEN ENDIF ELSE WHILE DO BEGINLOOP ENDLOOP
+%token CONTINUE READ WRITE AND OR NOT TRUE FALSE RETURN
+%token SUB ADD MULT DIV MOD UMINUS FOR
+%token EQ NEQ LT GT LTE GTE
+%token SEMICOLON COLON COMMA LPAREN RPAREN L_SQUARE_BRACKET R_SQUARE_BRACKET ASSIGN
 
 %left MULT DIV MOD ADD SUB
-
 %left GT GTE LT LTE EQ NEQ
-
-%right NOT
-
 %left AND OR
 
+%right NOT
 %right ASSIGN
 
 %token <numVal> NUMBER
-
 %token <identVal> IDENT
-
 %type <startprog> startprogram
-
-%type <grammar> program function declaration declarations Ident statements statement svar sif swhile sdo sfor varLoop sread swrite scontinue sreturn bool_expr relation_expr relation_exprs ece comp expression addSubExpr multi_expr term expressionLoop var
-
+%type <grammar> program function declaration declarations Ident statements statement svar sif 
+%type <grammar> swhile sdo sfor varLoop sread swrite scontinue sreturn bool_expr relation_expr
+%type <grammar>  relation_exprs ece comp expression addSubExpr multi_expr term expressionLoop var
 %%
-startprogram:	program {/*if(no_error) printf("%s\n", $1); cout << endl << code << endl;*/}
+startprogram:	program {}
 	    	;
 
 program:	function program
        		{}
-		| /*epsilon*/
+		|
 		{}
 		;
 
@@ -117,7 +116,7 @@ function:	FUNCTION Ident SEMICOLON BEGINPARAMS declarations ENDPARAMS BEGINLOCAL
 		{if (isFunc == 0) {code += "endfunc\n\n";} isFunc = true;}
 		;
 
-declarations:	/*epsilon*/
+declarations:	
 	    	{}
 		| declaration SEMICOLON declarations
 		{}
